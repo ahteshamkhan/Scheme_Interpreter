@@ -1,0 +1,494 @@
+;Name: Ash Khan
+;Date: 03/28/2016
+;File name: myMCI.scm
+;Assignment: Scheme
+;Description: This code represents a scheme metacircular interpreter. This 
+; interpreter interprets code in scheme language. 
+
+;;;
+;;; Template for Scheme Meta-Circular Interpreter
+;;;
+
+(define (MCeval exp env)
+;; Includes clauses to handle each of the required expressions and forms.
+;; These are the types of expressions that can appear in programs that this
+;; code can interpret. 
+  (cond ((self-evaluating? exp) exp) 
+        ((variable? exp) (lookup-variable-value exp env))
+        ((quoted? exp) (text-of-quotation exp))
+        ((assignment? exp) (eval-assignment exp env))
+        ((definition? exp) (eval-definition exp env))
+        ((if? exp) (eval-if exp env))
+        ((lambda? exp)
+         (make-procedure (lambda-parameters exp)
+                         (lambda-body exp)
+                         env))
+        ((begin? exp) 
+         (eval-sequence (begin-actions exp) env))
+        ((cond? exp) (MCeval (cond->if exp) env))
+        ((application? exp)
+         (MCapply (MCeval (operator exp) env)
+                (list-of-values (operands exp) env)))
+        (else
+         (error "Unknown expression type -- EVAL" exp))))
+
+(define (MCapply procedure arguments)
+;; To apply a builtin (primitive) procedure, simply apply the function
+;; to its arguments.
+  (cond ((primitive-procedure? procedure)
+         (apply-primitive-procedure procedure arguments))
+;; To apply a compound (non-primitive) procedure, evaluate the body of the
+;; procedure in a new environment that extends the current environment
+;; with a new frame that binds the arguments to the formal parameters
+        ((compound-procedure? procedure)
+         (eval-sequence
+           (procedure-body procedure)
+           (extend-environment
+             (procedure-parameters procedure)
+             arguments
+             (procedure-environment procedure))))
+        (else
+         (error
+          "Unknown procedure type -- APPLY" procedure))))
+
+(define (true? x)
+  (not (eq? x false)))
+
+(define (false? x)
+  (eq? x false))
+
+(define (list-of-values exps env)
+  ;; Return a list of values corresponding to the evaluated results
+  ;; of each exp in exps, based on environment env.
+  ;; FILL THIS IN
+  (cond ((null? exps) '())
+	(else 
+	 (cons (MCeval (car exps) env) (list-of-values (cdr exps) env)))))
+
+(define (first-operand ops) (car ops))
+
+(define (rest-operands ops) (cdr ops))
+
+(define (operator exp) (car exp))
+
+(define (operands exp) (cdr exp))
+
+(define (no-operands? ops) (null? ops))
+
+(define (eval-if exp env)
+;; Evaluate the predicate part of exp and return the result of evaluting
+;; either the consequent part or the alternative part of exp, all
+;; evalution being done in environment env
+;; FILL THIS IN
+
+(cond ((eq? (MCeval (cadr exp) env) true)
+       (MCeval (caddr exp) env))
+      (else (MCeval (if-alternative exp) env))
+  )) 
+
+(define (if? exp)
+;; Predicate: if-expressions begin with the word "if"
+;; FILL THIS IN
+  (tagged-list? exp 'if)
+)
+
+(define (if-predicate exp)
+;; Return the predicate part of an if-expression
+;; FILL THIS IN
+  (cadr exp)
+)
+
+(define (if-consequent exp)
+;; Return the consequent part of an if-expression
+;; FILL THIS IN
+  (caddr exp)
+)
+
+(define (if-alternative exp)
+;; Return the alternative (else) part of an if-expression
+;; FILL THIS IN
+  (cond ((not (null? (cdddr exp))) (cadddr exp))
+	(else 'false))
+) 
+
+(define (eval-sequence exp env)
+;; Used to help evaluate a 'begin' block of expressions.
+;; Evaluate the expressions in exps in order, and return the result
+;; of evaluting the last expression 
+;; FILL THIS IN 
+  (cond ((eq? (cdr exp) '()) (MCeval (car exp) env))
+	(else (MCeval (car exp) env)
+	      (eval-sequence (cdr exp) env))
+	)
+  )
+
+(define (set-variable-value! var val env)
+;; Changes the binding of variable var in environment env
+;; so that the variable is now bound to val; else, signals
+;; an error if variable is unbound
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ((null? vars)
+             (env-loop (enclosing-environment env)))
+            ((eq? var (car vars))
+             (set-car! vals val))
+            (else (scan (cdr vars) (cdr vals)))))
+    (if (eq? env the-empty-environment)
+        (error "Unbound variable -- SET!" var)
+        (let ((frame (first-frame env)))
+          (scan (frame-variables frame)
+                (frame-values frame)))))
+  (env-loop env))
+
+(define (define-variable! var val env)
+;; Adds a new or updated binding of var to val to the first frame of 
+;; environment env
+  (let ((frame (first-frame env)))
+    (define (scan vars vals)
+      (cond ((null? vars)
+             (add-binding-to-frame! var val frame))
+            ((eq? var (car vars))
+             (set-car! vals val))
+            (else (scan (cdr vars) (cdr vals)))))
+    (scan (frame-variables frame)
+          (frame-values frame))))
+
+(define (eval-assignment exp env)
+;; Set the value of the variable part of exp to
+;; the value part of exp using environment env, return 'ok
+;; FILL THIS IN
+  (set-variable-value! (cadr exp) (MCeval (caddr exp) env) env)
+  'ok)
+
+(define (eval-definition exp env)
+;; Define the value of the variable part of exp to
+;; the value part of exp updating environment env, return 'ok
+;; FILL THIS IN
+  (define-variable! (definition-variable exp) (MCeval (definition-value exp)
+						      env) env)
+  'ok)
+
+(define (self-evaluating? exp)
+;; Predicate: an expression is self-evaluating if it is
+;; a number or a string
+;; FILL THIS IN
+  (or (number? exp) (string? exp))
+)
+
+(define (tagged-list? exp tag) 
+  (cond ((pair? exp) (eq? (car exp) tag))
+	(else false)))
+
+(define (quoted? exp)
+;; Predicate: determine if an expression is quoted
+;; FILL THIS IN
+  (tagged-list? exp 'quote)
+)
+
+(define (variable? exp) 
+;; Predicate: only symbols can be used as a variable
+;; FILL THIS IN
+  (symbol? exp)
+)
+
+(define (assignment? exp)
+;; Predicate: assignments begin with "set!"
+;; FILL THIS IN
+  (tagged-list? exp 'set!)
+)
+
+(define (assignment-variable exp) (cadr exp))
+(define (assignment-value exp) (caddr exp))
+
+(define (definition? exp)
+;; Predicate: definitions begin with the word "define"
+;; FILL THIS IN
+  (tagged-list? exp 'define)
+)
+
+(define (definition-variable exp)
+;; Return the variable part of a definition of form
+;; (define <var> <value>), accounting for cases where
+;; <value> is a single value (like in direct assignment)
+;; and when it is a list (like in defining a procedure)
+;; FILL THIS IN
+  (cond ((symbol? (cadr exp)) (cadr exp))
+	(else (caadr exp)))
+)
+
+(define (definition-value exp)
+;; Return the value part of a definition of form
+;; (define <var> <value>), accounting for cases where
+;; <value> is a single value (like in direct assignment)
+;; and when it is a list (like in defining a procedure).
+;; In the latter case, a lambda expression must be created.
+;; FILL THIS IN
+  (cond ((symbol? (cadr exp)) (caddr exp))
+	(else (make-lambda (cdadr exp) (cddr exp))))
+)
+
+(define (first-frame env) (car env))
+(define (frame-values env) (cdr env))
+(define (frame-variables frame) (car frame))
+(define (frame-values frame) (cdr frame))
+(define (text-of-quotation exp) (cadr exp))
+
+(define (lambda? exp) 
+;; Predicate: a lambda expression begins with the word "lambda"
+;; FILL THIS IN
+  (tagged-list? exp 'lambda)
+)
+
+(define (lambda-parameters exp) (cadr exp))
+(define (lambda-body exp) (cddr exp))
+
+(define (make-lambda parameters body)
+;; Create a lambda expression by pre-pending the word "lambda"
+;; to the parameters and body provided, return the resultant list
+;; FILL THIS IN
+  (cons 'lambda (cons parameters body)))
+
+(define (begin? exp)
+;; Predicate: a begin expression begins with the word "begin"
+;; FILL THIS IN
+  (tagged-list? exp 'begin)
+)
+
+(define (begin-actions exp) (cdr exp))
+(define (last-exp? seq) (eq? (cdr seq) '()))
+(define (first-exp seq) (car seq))
+(define (rest-exps seq) (cdr seq))
+
+(define (sequence->exp seq)
+  (cond ((null? seq) seq)
+	((last-exp? seq) (first-exp seq))
+	(else (make-begin seq))))
+
+(define (make-begin seq) 
+  (cons 'begin seq)
+  )
+
+(define (application? exp) 
+;; Predicate: an application is any compound expression of the form
+;; (operator operand)
+;; FILL THIS IN
+  (pair? exp)
+)
+
+;;; HANDLE CONDS BY TRANSFORMING THEM INTO A SERIES OF IFS
+
+(define (cond? exp) 
+;; Predicate: a cond expression begins with the word "cond"
+;; FILL THIS IN
+  (tagged-list? exp 'cond)
+)
+
+(define (cond-clauses exp) (cdr exp))
+
+(define (cond-else-clause? clause)
+;; Predicate: a cond-else expression begins with the word "else"
+;; FILL THIS IN
+  (tagged-list? clause 'else)
+)
+
+(define (cond-predicate clause) (car clause))
+
+(define (cond-actions clause) (cdr clause))
+
+(define (cond->if exp)
+  (expand-clauses (cond-clauses exp))
+  )
+
+(define (expand-clauses clauses)
+  (if (null? clauses) 'false ; no else clause
+	(if (cond-else-clause? (car clauses))
+	    (if (null? (cdr clauses))
+		(sequence->exp (cond-actions (car clauses))))
+	    (make-if (caar clauses)
+		     (sequence->exp (cdar clauses))
+		     (expand-clauses (cdr clauses)))
+	    )
+	)
+)
+
+(define (make-if predicate consequent alternative)
+;; Create an if expression by pre-pending the word "if"
+;; to the expressions provided, return the resultant list
+;; FILL THIS IN
+  (list 'if predicate consequent alternative)
+)
+
+(define (compound-procedure? p)
+;; Predicate: a compound-procedure begins with the word "procedure"
+;; FILL THIS IN
+  (tagged-list? p 'procedure)
+  )
+
+(define (make-procedure parameters body env)
+;; Return a list beginning with the word 'procedure, and followed in order by 
+;; the parameters, body, and env provided.
+  (list 'procedure parameters body env)
+)
+
+(define (procedure-parameters p) (cadr p))
+(define (procedure-body p) (caddr p))
+(define (procedure-environment p) (cadddr p))
+
+;;; HANDLING ENVIRONMENTS
+;;; An environment is a series of frames, where each frame
+;;; is a table of bindings that associate variables with
+;;; their corresponding values
+;;; it can be implemented any way you choose
+;;; standard Scheme treats is as two lists - one for variables
+;;; and one for values - and uses positional correspondence to 
+;;; indicate bindings
+
+(define (enclosing-environment env) (cdr env))
+(define the-empty-environment '())
+
+(define (make-frame variables values)
+;; return a new frame that associates the variables
+;; with their correponding values
+;; FILL THIS IN
+  (cons variables values)
+)
+
+(define (frame-variables frame) (car frame))
+(define (frame-values frame) (cdr frame))
+
+(define (add-binding-to-frame! var val frame)
+;; Edit frame to include a new binding of var to val
+;; FILL THIS IN 
+  (set-car! frame (cons var (car frame)))
+  (set-cdr! frame (cons val (cdr frame)))
+)
+
+(define (extend-environment vars vals base-env)
+;; Return a new environment derived from base-env that
+;; adds a new frame containing the bindings of all
+;; vars to vals
+;; FILL THIS IN
+  (if (= (length vars) (length vals)) (cons (make-frame vars vals) base-env)
+      (if (< (length vars) (length vals))
+	  (error "More than expected arguments provided" vars vals)
+	  (error "Fewer than expected arguments provided" vars vals))
+      )
+  )
+
+(define (lookup-variable-value var env)
+;; Return the value of var in env, which may entail
+;; looking through enclosing environments if var is not
+;; locally defined.
+;; Signal an error if var is unbound
+;; FILL THIS IN
+
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ((null? vars)
+             (env-loop (enclosing-environment env)))
+            ((eq? var (car vars)) (car vals))
+            (else (scan (cdr vars) (cdr vals)))))
+    (if (eq? env the-empty-environment)
+        (error "Variable is unbound" var)
+        (let ((frame (first-frame env)))
+          (scan (frame-variables frame)
+                (frame-values frame)))))
+  (env-loop env)
+  )
+
+(define (setup-environment)
+  (let ((initial-env
+         (extend-environment (primitive-procedure-names)
+                             (primitive-procedure-objects)
+                             the-empty-environment)))
+    (define-variable! 'true true initial-env)
+    (define-variable! 'false false initial-env)
+    initial-env))
+
+(define (primitive-procedure? proc)
+;; Predicate: a primitive-procedure begins with the word "primitive"
+;; FILL THIS IN
+  (tagged-list? proc 'primitive)
+)
+
+(define (primitive-implementation proc)
+;; Return the chosen implementation for a given proc name
+  (cadr proc)) 
+
+;; These are the features of Scheme that we are "snarfing."
+;; We could have used fewer and implemented some of these,
+;; but you get the idea - we've got to start someplace.
+;; Other functions (apply, i/o) need not be included since
+;; they are used by Scheme prior to beginnning interpretation
+;; and we aren't planning on interpreting them in input files.
+
+(define primitive-procedures
+  (list (list 'car car)
+        (list 'cdr cdr)
+        (list 'cons cons)
+        (list 'null? null?)
+	(list '= =)
+	(list '> >)
+	(list '< <)
+	(list 'eq? eq?)
+	(list 'list list)
+	(list '+ +)
+	(list '- -)
+	(list '* *)
+	(list '/ /)
+	(list '<= <=)
+	(list '>= >=)))
+
+(define (primitive-procedure-names)
+;; Return a list of names of the primitive functions,
+;; given the above implementation of primitive-procedures
+;; FILL THIS IN
+  (map car primitive-procedures)
+)
+
+(define (primitive-procedure-objects)
+;; Return a list of the values (which are function objects)
+;; from primitive-procedures, each extended to begin
+;; with the word "primitive" 
+;; FILL THIS IN
+  (map (lambda (x) (list 'primitive (cadr x))) primitive-procedures)
+)
+
+(define (apply-primitive-procedure proc args)
+  (apply (primitive-implementation proc) args)) ; using Scheme's builtin apply
+
+(define input-prompt ";;; M-Eval input:")
+(define output-prompt ";;; M-Eval value:")
+
+(define (driver-loop fh)
+  (prompt-for-input input-prompt)
+  (let ((input (read fh)))
+    (if (eof-object? input) (close-input-port fh)
+    (let ((output (MCeval input the-global-environment)))
+      (user-print input)
+      (announce-output output-prompt)
+      (user-print output)
+      (driver-loop fh)))))
+
+(define (prompt-for-input string)
+  (newline) (newline) (display string))
+
+(define (announce-output string)
+  (newline) (display string))
+
+(define (user-print object)
+  (if (compound-procedure? object)
+      (display (list 'compound-procedure
+                     (procedure-parameters object)
+                     (procedure-body object)
+                     '<procedure-env>))
+      (display object))
+  (newline))
+
+;; Define initial environment using below from the Scheme command line
+;;(define the-global-environment (setup-environment)) 
+;; then, invoke start-interpreter on the file to be processed
+
+(define (start-interpreter filename)
+  (let ((fh (open-input-file filename)))
+    (driver-loop fh)))
